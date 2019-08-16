@@ -1,14 +1,18 @@
 package com.prolificinteractive.materialcalendarview;
 
 import android.animation.Animator;
+import android.animation.ObjectAnimator;
 import android.content.res.Resources;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.ViewPropertyAnimator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import com.prolificinteractive.materialcalendarview.format.TitleFormatter;
 
@@ -18,6 +22,10 @@ class TitleChanger {
   public static final int DEFAULT_Y_TRANSLATION_DP = 20;
 
   private final TextView title;
+  private final TextView past;
+  private final TextView future;
+  private final TextView year;
+
   @NonNull private TitleFormatter titleFormatter = TitleFormatter.DEFAULT;
 
   private final int animDelay;
@@ -30,29 +38,37 @@ class TitleChanger {
   private long lastAnimTime = 0;
   private CalendarDay previousMonth = null;
 
-  public TitleChanger(TextView title) {
-    this.title = title;
+  private final RelativeLayout topBar;
 
+  public TitleChanger(TextView title, TextView past, TextView future, RelativeLayout topBar, TextView year) {
+    this.title = title;
+    this.past = past;
+    this.future = future;
+    this.topBar = topBar;
+    this.year = year;
     Resources res = title.getResources();
 
     animDelay = DEFAULT_ANIMATION_DELAY;
 
-    animDuration = res.getInteger(android.R.integer.config_shortAnimTime) / 2;
+    animDuration = res.getInteger(android.R.integer.config_shortAnimTime) *2;
 
     translate = (int) TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, DEFAULT_Y_TRANSLATION_DP, res.getDisplayMetrics()
     );
   }
 
-  public void change(final CalendarDay currentMonth) {
+  public void change(final CalendarDay currentMonth,
+                     final CalendarDay previousMonth,
+                     final CalendarDay nextMonth) {
     long currentTime = System.currentTimeMillis();
 
     if (currentMonth == null) {
-      return;
+        return;
     }
 
     if (TextUtils.isEmpty(title.getText()) || (currentTime - lastAnimTime) < animDelay) {
-      doChange(currentTime, currentMonth, false);
+      doChange(currentTime, currentMonth, previousMonth,nextMonth, false);
+
     }
 
     if (currentMonth.equals(previousMonth) ||
@@ -61,66 +77,38 @@ class TitleChanger {
       return;
     }
 
-    doChange(currentTime, currentMonth, true);
+    doChange(currentTime, currentMonth,  previousMonth,nextMonth,false);
   }
 
-  private void doChange(final long now, final CalendarDay currentMonth, boolean animate) {
+  private String simpleDay(CalendarDay month) {
+    final CharSequence newTitle = titleFormatter.format(month);
+    String[] test = newTitle.toString().split(" ");
+    return test[0];
+  }
 
-    title.animate().cancel();
-    doTranslation(title, 0);
+  private void doChange(final long now,
+                        final CalendarDay currentMonth,
+                        final CalendarDay previousMonth,
+                        final CalendarDay nextMonth,
+                        boolean animate) {
 
-    title.setAlpha(1);
-    lastAnimTime = now;
+//    lastAnimTime = now;
+//
+    String newTitle = simpleDay(currentMonth);
+    String yearText = getYear(currentMonth);
+//
+    title.setText(newTitle);
+    past.setText(simpleDay(previousMonth));
+    future.setText(simpleDay(nextMonth));
+    year.setText(yearText);
 
-    final CharSequence newTitle = titleFormatter.format(currentMonth);
+    this.previousMonth = currentMonth;
+  }
 
-    if (!animate) {
-      title.setText(newTitle);
-    } else {
-      final int translation = translate * (previousMonth.isBefore(currentMonth) ? 1 : -1);
-      final ViewPropertyAnimator viewPropertyAnimator = title.animate();
-
-      if (orientation == MaterialCalendarView.HORIZONTAL) {
-        viewPropertyAnimator.translationX(translation * -1);
-      } else {
-        viewPropertyAnimator.translationY(translation * -1);
-      }
-
-      viewPropertyAnimator
-          .alpha(0)
-          .setDuration(animDuration)
-          .setInterpolator(interpolator)
-          .setListener(new AnimatorListener() {
-
-            @Override
-            public void onAnimationCancel(Animator animator) {
-              doTranslation(title, 0);
-              title.setAlpha(1);
-            }
-
-            @Override
-            public void onAnimationEnd(Animator animator) {
-              title.setText(newTitle);
-              doTranslation(title, translation);
-
-              final ViewPropertyAnimator viewPropertyAnimator = title.animate();
-              if (orientation == MaterialCalendarView.HORIZONTAL) {
-                viewPropertyAnimator.translationX(0);
-              } else {
-                viewPropertyAnimator.translationY(0);
-              }
-
-              viewPropertyAnimator
-                  .alpha(1)
-                  .setDuration(animDuration)
-                  .setInterpolator(interpolator)
-                  .setListener(new AnimatorListener())
-                  .start();
-            }
-          }).start();
-    }
-
-    previousMonth = currentMonth;
+  private String getYear(CalendarDay currentMonth) {
+      final CharSequence newTitle = titleFormatter.format(currentMonth);
+      String[] test = newTitle.toString().split(" ");
+      return test[1];
   }
 
   private void doTranslation(final TextView title, final int translate) {
@@ -145,5 +133,13 @@ class TitleChanger {
 
   public void setPreviousMonth(CalendarDay previousMonth) {
     this.previousMonth = previousMonth;
+  }
+
+  public void offset(float positionOffset) {
+    int width = topBar.getWidth();
+    ObjectAnimator topBarAnim = ObjectAnimator.ofFloat(topBar, "translationX", 0-((width*0.43f)* positionOffset));
+    topBarAnim.setDuration(0);
+    topBarAnim.start();
+
   }
 }
